@@ -2,8 +2,6 @@ package ringbuf
 
 import (
 	"sync/atomic"
-
-	"golang.org/x/sys/cpu"
 )
 
 type RbItemFlagType = uint32
@@ -18,8 +16,6 @@ var (
 )
 
 type rbItem struct {
-	_ cpu.CacheLinePad
-
 	value any
 	flag  RbItemFlagType
 }
@@ -50,6 +46,7 @@ func (e *rbItem) enqueue(item any) error {
 }
 
 func (e *rbItem) dequeue() (any, error) {
+
 	if !atomic.CompareAndSwapUint32(&e.flag, Dequeue, DequeueDone) {
 		if atomic.LoadUint32(&e.flag) == Dequeue {
 			return nil, ErrItemNeedReTry

@@ -3,8 +3,6 @@ package ringbuf
 import (
 	"runtime"
 	"sync/atomic"
-
-	"golang.org/x/sys/cpu"
 )
 
 type Opt func(rb *ringBuf)
@@ -20,8 +18,6 @@ type Opt func(rb *ringBuf)
 */
 
 type ringBuf struct {
-	_ cpu.CacheLinePad
-
 	data       []*rbItem
 	cap        uint32
 	capModMask uint32
