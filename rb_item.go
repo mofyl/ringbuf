@@ -1,7 +1,6 @@
 package ringbuf
 
 import (
-	"fmt"
 	"sync/atomic"
 
 	"golang.org/x/sys/cpu"
@@ -45,9 +44,7 @@ func (e *rbItem) enqueue(item any) error {
 
 	e.value = item
 
-	if !atomic.CompareAndSwapUint32(&e.flag, Used, Dequeue) {
-		fmt.Println(11111)
-	}
+	atomic.CompareAndSwapUint32(&e.flag, Used, Dequeue)
 
 	return nil
 }
@@ -63,9 +60,6 @@ func (e *rbItem) dequeue() (any, error) {
 	item := e.value
 	e.value = nil
 
-	if !atomic.CompareAndSwapUint32(&e.flag, DequeueDone, Initialization) {
-		fmt.Println(22222)
-	}
-
+	atomic.CompareAndSwapUint32(&e.flag, DequeueDone, Initialization)
 	return item, nil
 }
