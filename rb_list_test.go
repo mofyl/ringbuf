@@ -138,7 +138,7 @@ func BenchmarkEnDe(b *testing.B) {
 
 	rb := NewRingBufList()
 
-	enqueueMultiGorutine(b, rb, ctxWrite, writeCancel, gNum, b.N)
+	enqueueMultiGorutine(b, rb, writeCancel, gNum, b.N)
 
 	dequeueMultiGorutine(b, rb, ctxWrite, readCancel, gNum)
 
@@ -149,7 +149,6 @@ func BenchmarkEnDe(b *testing.B) {
 
 func enqueueMultiGorutine(b *testing.B,
 	rb RingBuf,
-	writeCtx context.Context,
 	cancel context.CancelFunc,
 	gNum int,
 	maxN int) {

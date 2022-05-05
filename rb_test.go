@@ -2,6 +2,9 @@ package ringbuf
 
 import (
 	"context"
+	"fmt"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 )
@@ -154,76 +157,117 @@ import (
 //	t.Log("done.")
 //
 //}
-
+//  go test -run "rb_test.go" -bench "BenchmarkRingBuf_Put16384" -cpuprofile cpu.profile -memprofile mem.profile -benchmem -v
 func BenchmarkRingBuf_Put16384(b *testing.B) {
-
 	b.ResetTimer()
 
 	ctxWrite, writeCancel := context.WithCancel(context.Background())
 
 	ctxRead, readCancel := context.WithCancel(context.Background())
 
-	rbCap := uint32(10000)
-	rb := NewRingBuf(WithCap(rbCap))
+	gNum := runtime.NumCPU()
+	runtime.GOMAXPROCS(gNum)
 
-	go enqueueRoutine(b, rb, writeCancel, b.N)
-	go dequeueRoutine(b, rb, ctxWrite, readCancel)
+	rb := NewRingBufList()
+
+	enqueueMultiGorutineRingBuf(b, rb, writeCancel, gNum, b.N)
+
+	dequeueMultiGorutineRingBuf(b, rb, ctxWrite, readCancel, gNum)
+
 	<-ctxWrite.Done()
 	<-ctxRead.Done()
 }
 
-func enqueueRoutine(t *testing.B, rb RingBuf, cancel context.CancelFunc, maxN int) {
+func enqueueMultiGorutineRingBuf(b *testing.B,
+	rb RingBuf,
+	cancel context.CancelFunc,
+	gNum int,
+	maxN int) {
 
-	var err error
+	wg := &sync.WaitGroup{}
 
-	for i := 0; i < maxN; i++ {
+	for i := 0; i < gNum; i++ {
+		wg.Add(1)
 
-		err = rb.Enqueue(i)
-		if err != nil {
-			if err == ErrQueueFull {
-				// block till queue not full
-				time.Sleep(1 * time.Millisecond)
-				continue
+		go func(idx int) {
+
+			writeNum := idx + maxN
+
+			for j := idx; j < writeNum; j++ {
+
+				err := rb.Enqueue(j)
+
+				if err != nil {
+					panic(fmt.Sprintf("Enqueue : err is %s", err.Error()))
+				}
+
 			}
 
-			t.Logf("[Enqueue] failed on i=%v. err: %s.", i, err.Error())
-		}
+			// b.Logf("Enqueue: g idx is %d , enqueue done \n", idx)
+
+			wg.Done()
+
+		}(i)
 
 	}
 
+	wg.Wait()
 	cancel()
-	t.Log("[Enqueue] END")
+	b.Logf("write done")
+
 }
 
-func dequeueRoutine(t *testing.B, rb RingBuf, writeCtx context.Context, cancel context.CancelFunc) {
+func dequeueMultiGorutineRingBuf(b *testing.B,
+	rb RingBuf,
+	writeCtx context.Context,
+	cancel context.CancelFunc,
+	gNum int) {
 
-	writeDone := false
-	for {
+	wg := &sync.WaitGroup{}
 
-		select {
-		case _, ok := <-writeCtx.Done():
-			if !ok {
-				writeDone = true
-			}
-		default:
-		}
+	for i := 0; i < gNum; i++ {
 
-		_, err := rb.Dequeue()
+		wg.Add(1)
 
-		if err != nil {
-			if err == ErrQueueEmpty {
-				if !writeDone {
-					continue
-				} else {
-					break
+		go func(idx int) {
+
+			for {
+
+				item, err := rb.Dequeue()
+
+				if err != nil && err != ErrQueueEmpty {
+					panic(fmt.Sprintf("Dequeue: g idx is %d , err is %s", idx, err.Error()))
 				}
+
+				if err == ErrQueueEmpty {
+
+					select {
+					case _, ok := <-writeCtx.Done():
+						if !ok {
+							b.Logf("Dequeue: g idx is %d ,dequeue done \n", idx)
+							wg.Done()
+							return
+						}
+					default:
+						time.Sleep(1 * time.Millisecond)
+						continue
+					}
+
+				}
+
+				if item == nil {
+					panic(fmt.Sprintf("Dequeue: item is nil g idx is %d", idx))
+				}
+
+				// b.Logf("Dequeue: g idx is %d , item is %v \n", idx, item)
+
 			}
 
-			t.Logf("[Dequeue] failed err: %s.", err.Error())
-		}
+		}(i)
 
 	}
 
+	wg.Wait()
 	cancel()
-	t.Log("[Dequeue] END")
+	b.Logf("read done")
 }

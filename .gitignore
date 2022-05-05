@@ -1,4 +1,6 @@
 .idea
 .vscode
-mem.out
-cpu.out
+mem.profile
+mem.profile.list
+cpu.profile
+cpu.profile.list
