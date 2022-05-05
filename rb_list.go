@@ -14,11 +14,12 @@ type ringBufList struct {
 }
 
 func NewRingBufList() RingBuf {
+	node := getRbItemNode()
+	head := unsafe.Pointer(node)
 
-	head := &rbItemList{}
 	rb := &ringBufList{
-		tail: unsafe.Pointer(head),
-		head: unsafe.Pointer(head),
+		tail: head,
+		head: head,
 	}
 
 	return rb
@@ -26,8 +27,8 @@ func NewRingBufList() RingBuf {
 }
 
 func (rb *ringBufList) Enqueue(item any) error {
-
-	n := &rbItemList{value: item}
+	node := getRbItemNode()
+	node.value = item
 
 	for {
 		tail := atomicLoadToRbItem(&rb.tail)
@@ -36,8 +37,8 @@ func (rb *ringBufList) Enqueue(item any) error {
 		if tail == atomicLoadToRbItem(&rb.tail) {
 			// 表示位置正确 可以cas
 			if next == nil {
-				if rbItemAtomicCas(&tail.next, next, n) {
-					rbItemAtomicCas(&rb.tail, tail, n)
+				if rbItemAtomicCas(&tail.next, next, node) {
+					rbItemAtomicCas(&rb.tail, tail, node)
 					atomic.AddInt32(&rb.length, 1)
 
 					return nil
@@ -81,6 +82,7 @@ func (rb *ringBufList) Dequeue() (any, error) {
 				if rbItemAtomicCas(&rb.head, head, next) {
 					atomic.AddInt32(&rb.length, -1)
 					rbItemAtomicCas(&head.next, next, nil)
+					putRbItemNode(head)
 					return v, nil
 				}
 			}

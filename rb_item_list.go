@@ -1,13 +1,29 @@
 package ringbuf
 
 import (
+	"sync"
 	"sync/atomic"
 	"unsafe"
+)
+
+var (
+	itemListPool = &sync.Pool{New: func() any {
+		return &rbItemList{}
+	}}
 )
 
 type rbItemList struct {
 	value any
 	next  unsafe.Pointer
+}
+
+func getRbItemNode() *rbItemList {
+
+	return itemListPool.Get().(*rbItemList)
+}
+
+func putRbItemNode(item *rbItemList) {
+	itemListPool.Put(item)
 }
 
 func atomicLoadToRbItem(p *unsafe.Pointer) *rbItemList {
